@@ -14,5 +14,11 @@ include_directories(/usr/local/include)
 link_directories(/usr/local/lib)
 
 add_executable(game ${SRC} ${INC})
-target_link_libraries(game SDL2 SDL2_Image)
+
+# non-standard SDL2_image lib names
+if (APPLE)
+    target_link_libraries(game SDL2 SDL2_Image)
+else()
+    target_link_libraries(game SDL2 SDL2_image)
+endif()
 

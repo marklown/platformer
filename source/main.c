@@ -11,6 +11,14 @@
 #define SIZE_X           20
 #define SIZE_Y           15
 
+static const Uint8 BELOW_C = 0;
+static const Uint8 ABOVE_C = 1;
+static const Uint8 LEFT = 2;
+static const Uint8 RIGHT = 3;
+static const Uint8 ABOVE_L = 4;
+static const Uint8 ABOVE_R = 5;
+static const Uint8 BELOW_L = 6;
+static const Uint8 BELOW_R = 7;
 
 typedef struct Player
 {
@@ -32,7 +40,6 @@ SDL_Renderer* renderer = NULL;
 
 Player player;
 Tile map[SIZE_X][SIZE_Y];
-
 
 void DrawDebugRect(const SDL_Rect* rect, Uint8 r, Uint8 g, Uint8 b, Uint8 a)
 {
@@ -65,13 +72,72 @@ void InitPlayer()
     memset(&player, 0, sizeof(Player));
     player.rect.x = 10 * 32;
     player.rect.y = SIZE_Y * 32 - 32 * 2 + 10;
-    player.rect.w = 32-4;
-    player.rect.h = 32-4;
+    player.rect.w = 32;
+    player.rect.h = 32;
     player.vx = 0;
     player.vy = 0;
     player.ax = 0;
     player.dx = 0;
     player.isOnGround = false;
+}
+
+void ResolveXCollisions()
+{
+    int mapX = (player.rect.x + 16) / 32;
+    int mapY = (player.rect.y + 16) / 32;
+    Tile* sorted[8];
+    sorted[BELOW_C] = &map[mapX][mapY+1];
+    sorted[ABOVE_C] = &map[mapX][mapY-1];
+    sorted[LEFT] = &map[mapX-1][mapY];
+    sorted[RIGHT] = &map[mapX+1][mapY];
+    sorted[ABOVE_L] = &map[mapX-1][mapY-1];
+    sorted[ABOVE_R] = &map[mapX+1][mapY-1];
+    sorted[BELOW_L] = &map[mapX-1][mapY+1];
+    sorted[BELOW_R] = &map[mapX+1][mapY+1];
+    for (int i=0;i<8;i++) {
+        if (sorted[i]->isSolid) {
+            if (Collides(&player.rect, &sorted[i]->rect)) {
+                DrawDebugRect(&sorted[i]->rect, 255, 0, 0, 255);
+                if (player.vx > 0) {
+                    player.rect.x = sorted[i]->rect.x - player.rect.w;
+                } else if (player.vx < 0) {
+                    player.rect.x = sorted[i]->rect.x + sorted[i]->rect.w;
+                }
+                player.vx = 0;
+            }
+        }
+    }
+}
+
+void ResolveYCollisions()
+{
+    int mapX = (player.rect.x + 16) / 32;
+    int mapY = (player.rect.y + 16) / 32;
+    Tile* sorted[8];
+    sorted[BELOW_C] = &map[mapX][mapY+1];
+    sorted[ABOVE_C] = &map[mapX][mapY-1];
+    sorted[LEFT] = &map[mapX-1][mapY];
+    sorted[RIGHT] = &map[mapX+1][mapY];
+    sorted[ABOVE_L] = &map[mapX-1][mapY-1];
+    sorted[ABOVE_R] = &map[mapX+1][mapY-1];
+    sorted[BELOW_L] = &map[mapX-1][mapY+1];
+    sorted[BELOW_R] = &map[mapX+1][mapY+1];
+    for (int i=0;i<8;i++) {
+        if (sorted[i]->isSolid) {
+            if (Collides(&player.rect, &sorted[i]->rect)) {
+                DrawDebugRect(&sorted[i]->rect, 255, 0, 0, 255);
+                if (player.vy > 0) {
+                    player.rect.y = sorted[i]->rect.y - player.rect.h;
+                    player.vy = 0;
+                    player.isOnGround = true;
+                } else if (player.vy < 0) {
+                    player.rect.y = sorted[i]->rect.y + sorted[i]->rect.h;
+                    player.vy = 0;
+                }
+            }
+        }
+    }
+
 }
 
 void UpdatePlayerPhysics(float dt)
@@ -85,128 +151,38 @@ void UpdatePlayerPhysics(float dt)
         player.vx = -PLAYER_X_VEL;
     }
     player.rect.x += player.vx * dt;
+
+    ResolveXCollisions();
+
     float gravity = GRAVITY;
     player.vy += gravity * dt;
     player.rect.y += player.vy * dt;
+
+    ResolveYCollisions();
 }
 
-void UpdatePlayerMapCollisions()
+void AddCollisionTileAt(Uint32 x, Uint32 y)
 {
-    // Resolve player collisions with the map
-    int mapX = player.rect.x / 32;
-    int mapY = player.rect.y / 32;
-    Tile* tilesAroundPlayer[9];
-    for (int i=0;i<9;i++) {
-        int c = i % 3;
-        int r = (int)(i / 3);
-        int tileX = mapX + c - 1;
-        int tileY = mapY + r - 1;
-        if (tileX >= 0 && tileY >=0 &&
-            tileX <= SIZE_X && tileY <= SIZE_Y) {
-            tilesAroundPlayer[i] = &map[tileX][tileY];
-        }
+    if (x > SIZE_X - 1 || y > SIZE_Y - 1) {
+        return;
     }
-    Tile* sorted[9];
-    sorted[0] = tilesAroundPlayer[0];
-    sorted[1] = tilesAroundPlayer[7];
-    sorted[2] = tilesAroundPlayer[2];
-    sorted[3] = tilesAroundPlayer[4];
-    sorted[4] = tilesAroundPlayer[5];
-    sorted[5] = tilesAroundPlayer[1];
-    sorted[6] = tilesAroundPlayer[3];
-    sorted[7] = tilesAroundPlayer[6];
-    sorted[8] = tilesAroundPlayer[8];
-    for (int i=0;i<9;i++) {
-        if (sorted[i]->isSolid) {
-            DrawDebugRect(&sorted[i]->rect, 0, 0, 255, 255);
-            if (Collides(&player.rect, &sorted[i]->rect)) {
-                DrawDebugRect(&sorted[i]->rect, 255, 0, 0, 255);
-
-                // Calculate player-tile overlap in x and y
-                int xOverlap = 0;
-                int yOverlap = 0;
-                if (player.rect.x < sorted[i]->rect.x) {
-                    xOverlap = player.rect.x + player.rect.w - sorted[i]->rect.x;
-                } else {
-                    xOverlap = sorted[i]->rect.x + sorted[i]->rect.w - player.rect.x;
-                }
-                if (player.rect.y < sorted[i]->rect.y) {
-                    yOverlap = player.rect.y + player.rect.h - sorted[i]->rect.y;
-                } else {
-                    yOverlap = sorted[i]->rect.y + sorted[i]->rect.h - player.rect.y;
-                }
-
-                if (i == 1) {
-                    // Tile directly below player
-                    player.rect.y -= yOverlap;
-                    player.vy = 0;
-                    player.isOnGround = true;
-                } else if (i == 2) {
-                    // Tile directly above player
-                    player.rect.y += yOverlap;
-                    player.vy = 0;
-                    printf("kasdfasdf\n");
-                } else if (i == 3) {
-                    // Tile directly to left of player
-                    player.rect.x += xOverlap;
-                } else if (i == 4) {
-                    // Tile directly to right of player
-                    player.rect.x -= xOverlap;
-                } else {
-                    // Deal with diagonals
-                    if (xOverlap > yOverlap) {
-                        int height;
-                        if (i == 5) {
-                            height = yOverlap;
-                            player.isOnGround = true;
-                        } else {
-                            height = -yOverlap;
-                        }
-                        player.rect.y += height;
-                        player.vy = 0;
-                    } else {
-                        int width;
-                        if (i == 6 || i == 4) {
-                            width = xOverlap;
-                        } else {
-                            width = -xOverlap;
-                        }
-                        player.rect.x += width;
-                    }
-                }
-            }
-        }
-    }
+    map[x][y].rect.x = x * 32;
+    map[x][y].rect.y = y * 32;
+    map[x][y].rect.w = 32;
+    map[x][y].rect.h = 32;
+    map[x][y].isSolid = true;
 }
 
 void InitMap()
 {
     memset(&map, 0, sizeof(map));
     for (int i=0;i<SIZE_X;i++) {
-        map[i][SIZE_Y-1].rect.x = i * 32;
-        map[i][SIZE_Y-1].rect.y = (SIZE_Y-1) * 32;
-        map[i][SIZE_Y-1].rect.w = 32;
-        map[i][SIZE_Y-1].rect.h = 32;
-        map[i][SIZE_Y-1].isSolid = true;
+        AddCollisionTileAt(i, SIZE_Y-1);
     }
-    for (int i=0;i<SIZE_X;i++) {
-        map[i][SIZE_Y-3].rect.x = i * 32;
-        map[i][SIZE_Y-3].rect.y = (SIZE_Y-3) * 32;
-        map[i][SIZE_Y-3].rect.w = 32;
-        map[i][SIZE_Y-3].rect.h = 32;
-        map[i][SIZE_Y-3].isSolid = true;
-    }
-    map[15][SIZE_Y-2].rect.x = 15 * 32;
-    map[15][SIZE_Y-2].rect.y = (SIZE_Y-2) * 32;
-    map[15][SIZE_Y-2].rect.w = 32;
-    map[15][SIZE_Y-2].rect.h = 32;
-    map[15][SIZE_Y-2].isSolid = true;
-
-    map[5][SIZE_Y-2].rect.x = 5 * 32;
-    map[5][SIZE_Y-2].rect.y = (SIZE_Y-2) * 32;
-    map[5][SIZE_Y-2].rect.w = 32;
-    map[5][SIZE_Y-2].rect.h = 32;
-    map[5][SIZE_Y-2].isSolid = true;
+    AddCollisionTileAt(15, SIZE_Y-2);
+    AddCollisionTileAt(5, SIZE_Y-2);
+    AddCollisionTileAt(10, SIZE_Y-4);
+    AddCollisionTileAt(7, SIZE_Y-6);
 }
 
 int main(int argc, char* argv[])
@@ -252,7 +228,7 @@ int main(int argc, char* argv[])
         lastTime = currentTime;
         currentTime = SDL_GetTicks();
         float dt = (currentTime - lastTime) * 0.001f;
-        
+
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
@@ -269,7 +245,7 @@ int main(int argc, char* argv[])
                             break;
                         case SDLK_SPACE:
                             if (player.isOnGround) {
-                                player.vy = -PLAYER_JUMP_VEL; 
+                                player.vy = -PLAYER_JUMP_VEL;
                                 player.isOnGround = false;
                             }
                     }
@@ -284,7 +260,7 @@ int main(int argc, char* argv[])
                             break;
                         case SDLK_RIGHT:
                             if (player.vx > 0) {
-                                player.vx = 0;    
+                                player.vx = 0;
                                 player.ax = 0;
                             }
                         break;
@@ -300,7 +276,6 @@ int main(int argc, char* argv[])
             DrawDebugMap();
 
             UpdatePlayerPhysics(dt);
-            UpdatePlayerMapCollisions();
 
             DrawDebugRect(&player.rect, 0, 255, 0, 255);
 
