@@ -26,7 +26,6 @@ typedef struct Player
     float vx;
     float vy;
     float ax;
-    float dx;
     bool isOnGround;
 } Player;
 
@@ -34,6 +33,7 @@ typedef struct Tile
 {
     SDL_Rect rect;
     bool isSolid;
+    void(*onCollision)(void);
 } Tile;
 
 SDL_Renderer* renderer = NULL;
@@ -77,7 +77,6 @@ void InitPlayer()
     player.vx = 0;
     player.vy = 0;
     player.ax = 0;
-    player.dx = 0;
     player.isOnGround = false;
 }
 
