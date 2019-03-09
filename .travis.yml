@@ -1,6 +1,6 @@
 dist: xenial
 
-language: cpp
+language: c
 
 # compilers to add to build matrix
 compiler:
